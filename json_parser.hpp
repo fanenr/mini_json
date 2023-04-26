@@ -83,7 +83,11 @@ std::string& get_string(json_node&);
 parse_code parse_array(json_node&, json_context&);
 std::vector<json_node>& get_array(json_node&);
 parse_code parse_object(json_node&, json_context&);
-
+std::string json_stringify(json_node&);
+void stringify_value(std::stringstream&, json_node&);
+void stringify_literal(std::stringstream&, json_node&);
+void stringify_array(std::stringstream&, json_node&);
+void stringify_object(std::stringstream&, json_node&);
 
 // main api
 parse_code json_parse(json_node& node, char const* src)
@@ -365,4 +369,100 @@ parse_code parse_object(json_node& node, json_context& context)
         if (*context.json == ',')
             context.json++;
     }
+}
+
+// json_stringify api
+std::string json_stringify(json_node& node)
+{
+    std::stringstream stream;
+    stringify_value(stream, node);
+    return stream.str();
+}
+
+// stringify_value
+void stringify_value(std::stringstream& stream, json_node& node)
+{
+    switch (node.type)
+    {
+    case json_type::array_:
+        stringify_array(stream, node);
+        break;
+
+    case json_type::object_:
+        stringify_object(stream, node);
+        break;
+
+    default:
+        stringify_literal(stream, node);
+        break;
+    }
+}
+
+// stringify_literal
+void stringify_literal(std::stringstream& stream, json_node& node)
+{
+    switch (node.type)
+    {
+        case json_type::null_:
+            stream << "null";
+            break;
+        case json_type::true_:
+            stream << "true";
+            break;
+        case json_type::false_:
+            stream << "false";
+            break;
+        case json_type::number_:
+            stream << node.data.number;
+            break;
+        case json_type::string_:
+            stream << '\"' << node.data.string << '\"';
+    }
+}
+
+// stringify_array
+void stringify_array(std::stringstream& stream, json_node& node)
+{
+    stream << '[';
+    for (auto it = node.data.array.begin(); it != node.data.array.end();) {
+        switch (it->type)
+        {
+            case json_type::array_:
+                stringify_array(stream, *it);
+                break;
+            case json_type::object_:
+                stringify_object(stream, *it);
+                break;
+            default:
+                stringify_literal(stream, *it);
+                break;
+        }
+        if (++it != node.data.array.end())
+            stream << ", ";
+    }
+    stream << ']';
+}
+
+// stringify_object
+void stringify_object(std::stringstream& stream, json_node& node)
+{
+    stream << '{';
+    for (auto it = node.data.member.begin(); it != node.data.member.end();) {
+        stream << '\"' << it->first << "\": ";
+        switch (it->second.type)
+        {
+            case json_type::array_:
+                stringify_array(stream, it->second);
+                break;
+            case json_type::object_:
+                stringify_object(stream, it->second);
+                break;
+            default:
+                stringify_literal(stream, it->second);
+                break;
+        }
+        if (++it != node.data.member.end())
+            stream << ", ";
+    }
+    stream << '}';
 }
