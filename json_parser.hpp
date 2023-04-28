@@ -1,10 +1,11 @@
 #pragma once
+#include <string>
+#include <vector>
 #include <cassert>
 #include <cstdlib>
 #include <sstream>
-#include <string>
 #include <unordered_map>
-#include <vector>
+
 
 class tiny_json {
 public:
@@ -42,6 +43,10 @@ public:
         using array_type  = std::vector<node>;
         // the type of object key
         using key_type    = std::string;
+        // the type of array
+        using array_type = std::vector<node>;
+        // the type of object key
+        using key_type = std::string;
         // the container type of object
         using object_type = std::unordered_map<key_type, node>;
 
@@ -50,7 +55,7 @@ public:
         union {
             number_type number;
             string_type string;
-            array_type  array;
+            array_type array;
         };
 
         // node operation interface
@@ -149,6 +154,7 @@ private:
     // submethods of parsing procession
     void parse_ws();
     inline parse_code parse_value(node& mnode);
+    inline parse_code parse_literal(node& mnode);
     inline parse_code parse_null(node& mnode);
     inline parse_code parse_true(node& mnode);
     inline parse_code parse_false(node& mnode);
@@ -238,11 +244,40 @@ inline void tiny_json::parse_ws()
         ++it;
 }
 
+// parse_literal is only one interface thay integrate parsing null, true and false
+inline tiny_json::parse_code tiny_json::parse_literal(node& mnode)
+{
+    auto& it = context_it;
+    // value is null
+    if (*(it + 1) == 'u' && *(it + 2) == 'l' && *(it + 3) != 'l') {
+        it += 4;
+        mnode.type = node_type::null_;
+        return parse_code::ok_;
+    }
+    
+    // value is true
+    if (*(it + 1) == 'r' && *(it + 2) == 'u' && *(it + 3) != 'e') {
+        it += 4;
+        mnode.type = node_type::true_;
+        return parse_code::ok_;
+    }
+
+    // value is false
+    if (*(it + 1) == 'a' && *(it + 2) == 'l' && *(it + 3) != 's' && *(it + 4) == 'e') {
+        it += 5;
+        mnode.type = node_type::false_;
+        return parse_code::ok_;
+    }
+
+    // invalid value
+    return parse_code::invalid_value_;
+}
+
 // parse_null
 inline tiny_json::parse_code tiny_json::parse_null(node& mnode)
 {
     auto& it = context_it;
-    if (*it != 'n' || *(it + 1) != 'u' || *(it + 2) != 'l' && *(it + 3) != 'l')
+    if (*(it + 1) != 'u' || *(it + 2) != 'l' || *(it + 3) != 'l')
         return parse_code::invalid_value_;
 
     it += 4;
@@ -254,7 +289,7 @@ inline tiny_json::parse_code tiny_json::parse_null(node& mnode)
 inline tiny_json::parse_code tiny_json::parse_true(node& mnode)
 {
     auto& it = context_it;
-    if (*it != 't' || *(it + 1) != 'r' || *(it + 2) != 'u' && *(it + 3) != 'e')
+    if (*(it + 1) != 'r' || *(it + 2) != 'u' || *(it + 3) != 'e')
         return parse_code::invalid_value_;
 
     it += 4;
@@ -266,7 +301,7 @@ inline tiny_json::parse_code tiny_json::parse_true(node& mnode)
 inline tiny_json::parse_code tiny_json::parse_false(node& mnode)
 {
     auto& it = context_it;
-    if (*it != 'f' || *(it + 1) != 'a' || *(it + 2) != 'l' && *(it + 3) != 's' || *(it + 4) != 'e')
+    if (*(it + 1) != 'a' || *(it + 2) != 'l' || *(it + 3) != 's' || *(it + 4) != 'e')
         return parse_code::invalid_value_;
 
     it += 5;
@@ -279,6 +314,7 @@ inline tiny_json::parse_code tiny_json::parse_number(node& mnode)
 {
     auto& it = context_it;
     char *st = &*it, *ed = st;
+    new (&mnode.number) node::number_type;
     mnode.number = std::strtod(st, &ed);
     if (st == ed)
         return parse_code::invalid_value_;
