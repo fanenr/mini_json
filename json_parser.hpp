@@ -43,10 +43,6 @@ public:
         using array_type  = std::vector<node>;
         // the type of object key
         using key_type    = std::string;
-        // the type of array
-        using array_type = std::vector<node>;
-        // the type of object key
-        using key_type = std::string;
         // the container type of object
         using object_type = std::unordered_map<key_type, node>;
 
@@ -63,6 +59,7 @@ public:
             : type(node_type::null_)
         {
         }
+
         node(node const& src)
         {
             type = src.type;
@@ -81,6 +78,7 @@ public:
                 break;
             }
         }
+
         node(node&& src)
         {
             type = src.type;
@@ -100,6 +98,7 @@ public:
             }
             src.type = node_type::null_;
         }
+
         node& operator=(node const& src)
         {
             type = src.type;
@@ -119,6 +118,7 @@ public:
             }
             return *this;
         }
+
         node& operator=(node&& src)
         {
             type = src.type;
@@ -139,6 +139,7 @@ public:
             src.type = node_type::null_;
             return *this;
         }
+        
         ~node()
         {
             if (type == node_type::string_)
@@ -159,7 +160,7 @@ private:
     inline parse_code parse_true(node& mnode);
     inline parse_code parse_false(node& mnode);
     inline parse_code parse_number(node& mnode);
-    inline parse_code parse_string(node& mnode);
+    inline parse_code parse_string(node& mnode, node::key_type* target = nullptr);
     inline parse_code parse_array(node& mnode);
     inline parse_code parse_key(std::string& mnode);
     inline parse_code parse_object(node& mnode);
@@ -325,17 +326,22 @@ inline tiny_json::parse_code tiny_json::parse_number(node& mnode)
 }
 
 // parse_string
-inline tiny_json::parse_code tiny_json::parse_string(node& mnode)
+inline tiny_json::parse_code tiny_json::parse_string(node& mnode, node::key_type* target)
 {
     auto& it = context_it;
     std::stringstream str;
-    new (&mnode.string) node::string_type;
+    if (!target)
+        new (&mnode.string) node::string_type;
 
     while (true) {
         switch (*++it) {
         case '\"': {
-            mnode.type = node_type::string_;
-            mnode.string = std::move(str.str());
+            if (target) {
+                *target = std::move(str.str());
+            } else {
+                mnode.type = node_type::string_;
+                mnode.string = std::move(str.str());
+            }
             ++it;
             return parse_code::ok_;
         }
@@ -489,7 +495,7 @@ inline tiny_json::parse_code tiny_json::parse_object(node& mnode)
 
     while (true) {
         parse_ws();
-        auto ret = parse_key(key);
+        auto ret = parse_string(cnode, &key);
         if (ret != parse_code::ok_)
             return ret;
 
@@ -503,9 +509,8 @@ inline tiny_json::parse_code tiny_json::parse_object(node& mnode)
         if (ret != parse_code::ok_)
             return ret;
 
-        // TODO: save subobject into node
-        mnode.object.insert({ std::move(key), std::move(cnode) });
-        // mnode.object.emplace(std::move(key), std::move(cnode));
+        // mnode.object.insert({ std::move(key), std::move(cnode) });
+        mnode.object.emplace(std::move(key), std::move(cnode));
         parse_ws();
 
         if (*it == '}') {
