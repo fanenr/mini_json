@@ -1,136 +1,229 @@
 #pragma once
-#include <cstdlib>
-#include <string>
 #include <cassert>
+#include <cstdlib>
 #include <sstream>
-#include <vector>
+#include <string>
 #include <unordered_map>
+#include <vector>
 
-enum class json_type {
-    null_,
-    true_,
-    false_,
-    number_,
-    string_,
-    array_,
-    object_
-};
+class tiny_json {
+public:
+    // the type of node supported
+    enum class node_type {
+        null_,
+        true_,
+        false_,
+        number_,
+        string_,
+        array_,
+        object_
+    };
 
-enum class parse_code {
-    ok_,
-    expect_value_,
-    invalid_value_,
-    root_singular_,
+    // the result code of parsing processing
+    enum class parse_code {
+        ok_,
+        expect_value_,
+        invalid_value_,
+        root_singular_,
+        invalid_key_,
+        miss_split_
+    };
 
-    invalid_key_,
-    miss_split_
-};
+public:
+    // json node is parsing target
+    struct node {
+        // the type of node
+        node_type type;
+        // the type of number
+        using number_type = double;
+        // the type of string
+        using string_type = std::string;
+        // the container type of array
+        using array_type  = std::vector<node>;
+        // the type of object key
+        using key_type    = std::string;
+        // the container type of object
+        using object_type = std::unordered_map<key_type, node>;
 
+        // the data of node
+        object_type object;
+        union {
+            number_type number;
+            string_type string;
+            array_type  array;
+        };
 
-struct json_node
-{
-    struct data_t
-    {
-        std::string string;
-        std::vector<json_node> array;
-        std::unordered_map<std::string, json_node> member;
-        double number;
-    } data;
-    
-    json_type type;
-    
-    char const* type_name()
-    {
-        switch (type)
+        // node operation interface
+        node()
+            : type(node_type::null_)
         {
-            case json_type::null_:
-                return "null";
-            case json_type::true_:
-                return "true";
-            case json_type::false_:
-                return "false";
-            case json_type::string_:
-                return "string";
-            case json_type::array_:
-                return "array";
-            case json_type::object_:
-                return "object";
-            default:
-                return "invalid type";
         }
+        node(node const& src)
+        {
+            type = src.type;
+            switch (type) {
+            case node_type::number_:
+                number = src.number;
+                break;
+            case node_type::string_:
+                new (&string) string_type(src.string);
+                break;
+            case node_type::array_:
+                new (&array) array_type(src.array);
+                break;
+            case node_type::object_:
+                new (&object) object_type(src.object);
+                break;
+            }
+        }
+        node(node&& src)
+        {
+            type = src.type;
+            switch (type) {
+            case node_type::number_:
+                number = src.number;
+                break;
+            case node_type::string_:
+                new (&string) string_type(std::move(src.string));
+                break;
+            case node_type::array_:
+                new (&array) array_type(std::move(src.array));
+                break;
+            case node_type::object_:
+                new (&object) object_type(std::move(src.object));
+                break;
+            }
+            src.type = node_type::null_;
+        }
+        node& operator=(node const& src)
+        {
+            type = src.type;
+            switch (type) {
+            case node_type::number_:
+                number = src.number;
+                break;
+            case node_type::string_:
+                new (&string) string_type(src.string);
+                break;
+            case node_type::array_:
+                new (&array) array_type(src.array);
+                break;
+            case node_type::object_:
+                new (&object) object_type(src.object);
+                break;
+            }
+            return *this;
+        }
+        node& operator=(node&& src)
+        {
+            type = src.type;
+            switch (type) {
+            case node_type::number_:
+                number = src.number;
+                break;
+            case node_type::string_:
+                new (&string) string_type(std::move(src.string));
+                break;
+            case node_type::array_:
+                new (&array) array_type(std::move(src.array));
+                break;
+            case node_type::object_:
+                new (&object) object_type(std::move(src.object));
+                break;
+            }
+            src.type = node_type::null_;
+            return *this;
+        }
+        ~node()
+        {
+            if (type == node_type::string_)
+                string.~basic_string();
+            if (type == node_type::array_)
+                array.~vector();
+            if (type == node_type::object_)
+                object.clear();
+        }
+    };
+
+private:
+    // submethods of parsing procession
+    void parse_ws();
+    inline parse_code parse_value(node& mnode);
+    inline parse_code parse_null(node& mnode);
+    inline parse_code parse_true(node& mnode);
+    inline parse_code parse_false(node& mnode);
+    inline parse_code parse_number(node& mnode);
+    inline parse_code parse_string(node& mnode);
+    inline parse_code parse_array(node& mnode);
+    inline parse_code parse_key(std::string& mnode);
+    inline parse_code parse_object(node& mnode);
+
+    // submethods of stringify procession
+    inline void str_value(node& mnode);
+    inline void str_literal(node& mnode);
+    inline void str_array(node& mnode);
+    inline void str_object(node& mnode);
+
+private:
+    // node is the target of parsing
+    node rnode;
+    // context is carrier of parsing procession
+    std::string context;
+    // the iterator records the parsing position
+    decltype(context)::iterator context_it;
+    // sstring is stringstream carries stringify result
+    std::stringstream sstring;
+
+public:
+    template <typename T>
+    tiny_json(T&& src)
+        : context(std::forward<T>(src))
+        , context_it(context.begin())
+        , rnode()
+    {
     }
+
+    ~tiny_json()
+    {
+        rnode.~node();
+    }
+
+    // main interface
+    inline parse_code parse();
+    inline std::string str();
 };
 
-
-struct json_context
+inline tiny_json::parse_code tiny_json::parse()
 {
-    char const* json;
-};
-
-
-
-parse_code json_parse(json_node&, char const*);
-json_type  get_type(json_node&);
-parse_code parse_value(json_node&, json_context&);
-void       parse_ws(json_context&);
-parse_code parse_null(json_node&, json_context&);
-parse_code parse_true(json_node&, json_context&);
-parse_code parse_false(json_node&, json_context&);
-parse_code parse_number(json_node&, json_context&);
-double     get_number(json_node&);
-parse_code parse_string(json_node&, json_context&);
-std::string& get_string(json_node&);
-parse_code parse_array(json_node&, json_context&);
-std::vector<json_node>& get_array(json_node&);
-parse_code parse_object(json_node&, json_context&);
-std::string json_stringify(json_node&);
-void stringify_value(std::stringstream&, json_node&);
-void stringify_literal(std::stringstream&, json_node&);
-void stringify_array(std::stringstream&, json_node&);
-void stringify_object(std::stringstream&, json_node&);
-
-// main api
-parse_code json_parse(json_node& node, char const* src)
-{
-    json_context context;
-    node.type = json_type::null_;
-    context.json = src;
-    return parse_value(node, context);
-}
-
-
-// get node type
-json_type get_type(json_node& node)
-{
-    return node.type;
+    rnode.type = node_type::null_;
+    return parse_value(rnode);
 }
 
 // parse_value
-parse_code parse_value(json_node& node, json_context& context)
+inline tiny_json::parse_code tiny_json::parse_value(node& mnode)
 {
-    parse_ws(context);
-    switch (*context.json)
-    {
+    parse_ws();
+    switch (*context_it) {
     case 'n':
-        return parse_null(node, context);
+        return parse_null(mnode);
 
     case 't':
-        return parse_true(node, context);
+        return parse_true(mnode);
 
     case 'f':
-        return parse_false(node, context);
+        return parse_false(mnode);
 
     case '\"':
-        return parse_string(node, context);
+        return parse_string(mnode);
 
     case '[':
-        return parse_array(node, context);
+        return parse_array(mnode);
 
     case '{':
-        return parse_object(node, context);
+        return parse_object(mnode);
 
     default:
-        return parse_number(node, context);
+        return parse_number(mnode);
 
     case '\0':
         return parse_code::expect_value_;
@@ -138,99 +231,107 @@ parse_code parse_value(json_node& node, json_context& context)
 }
 
 // parse_whitespace
-void parse_ws(json_context& context)
+inline void tiny_json::parse_ws()
 {
-    auto ptr = context.json;
-    while (*ptr == ' ' || *ptr == '\n' || *ptr == '\t' || *ptr == '\r')
-        ptr++;
-    context.json = ptr;
+    auto& it = context_it;
+    while (*it == ' ' || *it == '\n' || *it == '\t' || *it == '\r')
+        ++it;
 }
 
 // parse_null
-parse_code parse_null(json_node& node, json_context& context)
+inline tiny_json::parse_code tiny_json::parse_null(node& mnode)
 {
-    auto ptr = context.json;
-    if (ptr[0] != 'n' || ptr[1] != 'u' || ptr[2] != 'l' && ptr[3] != 'l')
+    auto& it = context_it;
+    if (*it != 'n' || *(it + 1) != 'u' || *(it + 2) != 'l' && *(it + 3) != 'l')
         return parse_code::invalid_value_;
-    ptr += 4;
-    node.type = json_type::null_;
-    context.json = ptr;
+
+    it += 4;
+    mnode.type = node_type::null_;
     return parse_code::ok_;
 }
 
 // parse_true
-parse_code parse_true(json_node& node, json_context& context)
+inline tiny_json::parse_code tiny_json::parse_true(node& mnode)
 {
-    auto ptr = context.json;
-    if (ptr[0] != 't' || ptr[1] != 'r' || ptr[2] != 'u' && ptr[3] != 'e')
+    auto& it = context_it;
+    if (*it != 't' || *(it + 1) != 'r' || *(it + 2) != 'u' && *(it + 3) != 'e')
         return parse_code::invalid_value_;
-    ptr += 4;
-    node.type = json_type::true_;
-    context.json = ptr;
+
+    it += 4;
+    mnode.type = node_type::true_;
     return parse_code::ok_;
 }
 
 // parse_false
-parse_code parse_false(json_node& node, json_context& context)
+inline tiny_json::parse_code tiny_json::parse_false(node& mnode)
 {
-    auto ptr = context.json;
-    if (ptr[0] != 'f' || ptr[1] != 'a' || ptr[2] != 'l' && ptr[3] != 's' || ptr[4] != 'e')
+    auto& it = context_it;
+    if (*it != 'f' || *(it + 1) != 'a' || *(it + 2) != 'l' && *(it + 3) != 's' || *(it + 4) != 'e')
         return parse_code::invalid_value_;
-    ptr += 5;
-    node.type = json_type::false_;
-    context.json = ptr;
+
+    it += 5;
+    mnode.type = node_type::false_;
     return parse_code::ok_;
 }
 
 // parse_number
-parse_code parse_number(json_node& node, json_context& context)
+inline tiny_json::parse_code tiny_json::parse_number(node& mnode)
 {
-    char* end;
-    node.data.number = std::strtod(context.json, &end);
-    if (end == context.json)
+    auto& it = context_it;
+    char *st = &*it, *ed = st;
+    mnode.number = std::strtod(st, &ed);
+    if (st == ed)
         return parse_code::invalid_value_;
-    context.json = end;
-    node.type = json_type::number_;
+
+    it += ed - st;
+    mnode.type = node_type::number_;
     return parse_code::ok_;
 }
 
-// get_number
-double get_number(json_node& node)
-{
-    assert(node.type == json_type::number_);
-    return node.data.number;
-}
-
 // parse_string
-parse_code parse_string(json_node& node, json_context& context)
+inline tiny_json::parse_code tiny_json::parse_string(node& mnode)
 {
-    auto ptr = context.json;
-    std::stringstream stream;
+    auto& it = context_it;
+    std::stringstream str;
+    new (&mnode.string) node::string_type;
 
     while (true) {
-        switch (*++ptr)
-        {
-        case '\"':
-        {
-            node.type = json_type::string_;
-            node.data.string = std::move(stream.str());
-            context.json = ++ptr;
+        switch (*++it) {
+        case '\"': {
+            mnode.type = node_type::string_;
+            mnode.string = std::move(str.str());
+            ++it;
             return parse_code::ok_;
         }
         case '\0':
             return parse_code::invalid_value_;
 
         case '\\':
-            switch (*++ptr)
-            {
-            case '\"': stream << '\"'; break;
-            case '\\': stream << '\\'; break;
-            case '/':  stream << '/'; break;
-            case 'b':  stream << '\b'; break;
-            case 'f':  stream << '\f'; break;
-            case 'n':  stream << '\n'; break;
-            case 'r':  stream << '\r'; break;
-            case 't':  stream << '\t'; break;
+            switch (*++it) {
+            case '\"':
+                str << '\"';
+                break;
+            case '\\':
+                str << '\\';
+                break;
+            case '/':
+                str << '/';
+                break;
+            case 'b':
+                str << '\b';
+                break;
+            case 'f':
+                str << '\f';
+                break;
+            case 'n':
+                str << '\n';
+                break;
+            case 'r':
+                str << '\r';
+                break;
+            case 't':
+                str << '\t';
+                break;
             case 'u':
                 /* TODO: handle UNICODE string */
                 break;
@@ -239,81 +340,87 @@ parse_code parse_string(json_node& node, json_context& context)
             }
             break;
         default:
-            stream << *ptr;
+            str << *it;
             break;
         }
     }
 }
 
-// get_string
-std::string& get_string(json_node& node)
-{
-    assert(node.type == json_type::string_);
-    return node.data.string;
-}
-
 // parse_array
-parse_code parse_array(json_node& node, json_context& context)
+inline tiny_json::parse_code tiny_json::parse_array(node& mnode)
 {
-    context.json++;
-    parse_ws(context);
+    auto& it = ++context_it;
+    new (&mnode.array) node::array_type;
+    parse_ws();
 
-    if (*context.json == ']') {
-        context.json++;
-        node.type == json_type::array_;
+    if (*it == ']') {
+        ++it;
+        mnode.type == node_type::array_;
         return parse_code::ok_;
     }
-    
 
+    node cnode;
     while (true) {
-        json_node cnode;
-
-        parse_code sts = parse_value(cnode, context);
+        parse_code sts = parse_value(cnode);
         if (sts != parse_code::ok_)
             return sts;
-        
-        node.data.array.push_back(std::move(cnode));
 
-        if (*context.json == ']') {
-            context.json++;
-            node.type = json_type::array_;
+        // TODO: svae cnode into mnode
+        mnode.array.push_back(std::move(cnode));
+
+        if (*it == ']') {
+            ++it;
+            mnode.type = node_type::array_;
             return parse_code::ok_;
         }
 
-        if (*context.json == ',')
-            context.json++;
+        if (*it == ',')
+            ++it;
     }
 }
 
 // parse_key
-parse_code parse_key(std::string& key, json_context& context)
+inline tiny_json::parse_code tiny_json::parse_key(node::key_type& key)
 {
-    auto ptr = context.json;
+    auto& it = context_it;
     std::stringstream stream;
 
     while (true) {
-        switch (*++ptr)
-        {
-        case '\"':
-        {
+        switch (*++it) {
+        case '\"': {
             key = std::move(stream.str());
-            context.json = ++ptr;
+            ++it;
             return parse_code::ok_;
         }
         case '\0':
             return parse_code::invalid_key_;
 
         case '\\':
-            switch (*++ptr)
-            {
-            case '\"': stream << '\"'; break;
-            case '\\': stream << '\\'; break;
-            case '/':  stream << '/'; break;
-            case 'b':  stream << '\b'; break;
-            case 'f':  stream << '\f'; break;
-            case 'n':  stream << '\n'; break;
-            case 'r':  stream << '\r'; break;
-            case 't':  stream << '\t'; break;
+            switch (*++it) {
+            case '\"':
+                stream << '\"';
+                break;
+            case '\\':
+                stream << '\\';
+                break;
+            case '/':
+                stream << '/';
+                break;
+            case 'b':
+                stream << '\b';
+                break;
+            case 'f':
+                stream << '\f';
+                break;
+            case 'n':
+                stream << '\n';
+                break;
+            case 'r':
+                stream << '\r';
+                break;
+            case 't':
+                stream << '\t';
+                break;
             case 'u':
                 /* TODO: handle UNICODE string */
                 break;
@@ -322,147 +429,147 @@ parse_code parse_key(std::string& key, json_context& context)
             }
             break;
         default:
-            stream << *ptr;
+            stream << *it;
             break;
         }
     }
 }
 
 // parse_object
-parse_code parse_object(json_node& node, json_context& context)
+inline tiny_json::parse_code tiny_json::parse_object(node& mnode)
 {
-    context.json++;
-    parse_ws(context);
-    if (*context.json == '}') {
-        node.type = json_type::object_;
-        context.json++;
+    auto& it = ++context_it;
+    new (&mnode.object) node::object_type;
+    parse_ws();
+
+    if (*it == '}') {
+        mnode.type = node_type::object_;
+        ++it;
         return parse_code::ok_;
     }
 
+    node cnode;
+    node::key_type key;
+
     while (true) {
-        std::string key;
-        parse_ws(context);
-        parse_code ret = parse_key(key, context);
+        parse_ws();
+        auto ret = parse_key(key);
         if (ret != parse_code::ok_)
             return ret;
 
-        parse_ws(context);
-        if (*context.json == ':')
-            context.json++;
+        parse_ws();
+        if (*it == ':')
+            ++it;
         else
             return parse_code::miss_split_;
-        
-        json_node cnode;
-        ret = parse_value(cnode, context);
+
+        ret = parse_value(cnode);
         if (ret != parse_code::ok_)
             return ret;
 
-        node.data.member.insert({std::move(key), std::move(cnode)});
-        parse_ws(context);
-        
-        if (*context.json == '}') {
-            node.type = json_type::object_;
-            context.json++;
+        // TODO: save subobject into node
+        mnode.object.insert({ std::move(key), std::move(cnode) });
+        // mnode.object.emplace(std::move(key), std::move(cnode));
+        parse_ws();
+
+        if (*it == '}') {
+            mnode.type = node_type::object_;
+            ++it;
             return parse_code::ok_;
         }
 
-        if (*context.json == ',')
-            context.json++;
+        if (*it == ',')
+            ++it;
     }
 }
 
 // json_stringify api
-std::string json_stringify(json_node& node)
+inline std::string tiny_json::str()
 {
-    std::stringstream stream;
-    stringify_value(stream, node);
-    return stream.str();
+    str_value(rnode);
+    return sstring.str();
 }
 
 // stringify_value
-void stringify_value(std::stringstream& stream, json_node& node)
+inline void tiny_json::str_value(node& mnode)
 {
-    switch (node.type)
-    {
-    case json_type::array_:
-        stringify_array(stream, node);
+    switch (mnode.type) {
+    case node_type::array_:
+        str_array(mnode);
         break;
 
-    case json_type::object_:
-        stringify_object(stream, node);
+    case node_type::object_:
+        str_object(mnode);
         break;
 
     default:
-        stringify_literal(stream, node);
+        str_literal(mnode);
         break;
     }
 }
 
 // stringify_literal
-void stringify_literal(std::stringstream& stream, json_node& node)
+inline void tiny_json::str_literal(node& mnode)
 {
-    switch (node.type)
-    {
-        case json_type::null_:
-            stream << "null";
-            break;
-        case json_type::true_:
-            stream << "true";
-            break;
-        case json_type::false_:
-            stream << "false";
-            break;
-        case json_type::number_:
-            stream << node.data.number;
-            break;
-        case json_type::string_:
-            stream << '\"' << node.data.string << '\"';
+    switch (mnode.type) {
+    case node_type::null_:
+        sstring << "null";
+        break;
+    case node_type::true_:
+        sstring << "true";
+        break;
+    case node_type::false_:
+        sstring << "false";
+        break;
+    case node_type::number_:
+        sstring << mnode.number;
+        break;
+    case node_type::string_:
+        sstring << '\"' << mnode.string << '\"';
     }
 }
 
 // stringify_array
-void stringify_array(std::stringstream& stream, json_node& node)
+inline void tiny_json::str_array(node& mnode)
 {
-    stream << '[';
-    for (auto it = node.data.array.begin(); it != node.data.array.end();) {
-        switch (it->type)
-        {
-            case json_type::array_:
-                stringify_array(stream, *it);
-                break;
-            case json_type::object_:
-                stringify_object(stream, *it);
-                break;
-            default:
-                stringify_literal(stream, *it);
-                break;
+    sstring << '[';
+    for (auto it = mnode.array.begin(); it != mnode.array.end();) {
+        switch (it->type) {
+        case node_type::array_:
+            str_array(*it);
+            break;
+        case node_type::object_:
+            str_object(*it);
+            break;
+        default:
+            str_literal(*it);
+            break;
         }
-        if (++it != node.data.array.end())
-            stream << ", ";
+        if (++it != mnode.array.end())
+            sstring << ", ";
     }
-    stream << ']';
+    sstring << ']';
 }
 
 // stringify_object
-void stringify_object(std::stringstream& stream, json_node& node)
+inline void tiny_json::str_object(node& mnode)
 {
-    stream << '{';
-    for (auto it = node.data.member.begin(); it != node.data.member.end();) {
-        stream << '\"' << it->first << "\": ";
-        switch (it->second.type)
-        {
-            case json_type::array_:
-                stringify_array(stream, it->second);
-                break;
-            case json_type::object_:
-                stringify_object(stream, it->second);
-                break;
-            default:
-                stringify_literal(stream, it->second);
-                break;
+    sstring << '{';
+    for (auto it = mnode.object.begin(); it != mnode.object.end();) {
+        sstring << '\"' << it->first << "\": ";
+        switch (it->second.type) {
+        case node_type::array_:
+            str_array(it->second);
+            break;
+        case node_type::object_:
+            str_object(it->second);
+            break;
+        default:
+            str_literal(it->second);
+            break;
         }
-        if (++it != node.data.member.end())
-            stream << ", ";
+        if (++it != mnode.object.end())
+            sstring << ", ";
     }
-    stream << '}';
+    sstring << '}';
 }
