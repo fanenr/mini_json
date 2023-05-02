@@ -1,1 +1,1 @@
-{"name":"wufan","age":19,"skills":["C++",["hello","world"],{"vegetables":"tomato","food":"rice"},"C"]}
+{"name":"\u5434\u51E1","age":19,"skills":["C++",["hello","world"],{"vegetables":"tomato","food":"rice"},"C"]}

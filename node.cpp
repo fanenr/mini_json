@@ -1,3 +1,4 @@
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -13,6 +14,8 @@ enum class node_type {
     object_
 };
 
+// json node is parsing target
+template <typename T>
 struct node {
     // the type of node
     node_type type;
@@ -24,7 +27,7 @@ struct node {
     using array_type = std::vector<node>;
     // the type of object key
     using key_type = std::string;
-    // the container type of object
+    // the container type of objec
     using object_type = std::unordered_map<key_type, node>;
 
     // the data of node
@@ -40,6 +43,15 @@ struct node {
         : type(node_type::null_)
     {
     }
+
+    
+
+    node(node::number_type num)
+        : number(num)
+        , type(node_type::number_)
+    {
+    }
+
     node(node const& src)
     {
         type = src.type;
@@ -58,6 +70,7 @@ struct node {
             break;
         }
     }
+
     node(node&& src)
     {
         type = src.type;
@@ -77,8 +90,12 @@ struct node {
         }
         src.type = node_type::null_;
     }
+
     node& operator=(node const& src)
     {
+        if (this == &src)
+            return *this;
+
         type = src.type;
         switch (type) {
         case node_type::number_:
@@ -96,8 +113,12 @@ struct node {
         }
         return *this;
     }
+
     node& operator=(node&& src)
     {
+        if (this == &src)
+            return *this;
+
         type = src.type;
         switch (type) {
         case node_type::number_:
@@ -116,6 +137,7 @@ struct node {
         src.type = node_type::null_;
         return *this;
     }
+
     ~node()
     {
         if (type == node_type::string_)
@@ -125,16 +147,50 @@ struct node {
         if (type == node_type::object_)
             object.clear();
     }
+
+    node& operator[](int index)
+    {
+        // TODO: check whether the node type is array
+        return array[index];
+    }
+
+    node& operator[](node::key_type key)
+    {
+        // TODO: check whether the node type is object
+        return object[key];
+    }
+
+    node& at(int index)
+    {
+        // TODO: check whether the node type is array
+        return array.at(index);
+    }
+
+    node& at(node::key_type key)
+    {
+        // TODO: check whether the node type is object
+        return object.at(key);
+    }
+
+
 };
+
+// since C++ 17 
+node() -> node<void>;
 
 int main()
 {
-    node rnode, cnode;
-    rnode.type = node_type::object_;
-    new (&rnode.object) node::object_type;
-    rnode.object.emplace("name", cnode);
+    node mnode;
+    mnode.type = node_type::object_;
+    new (&mnode.object) node::object_type;
 
-    node::object_type map;
-    map.emplace("name", cnode);
-    std::cout << sizeof(node);
+    node cnode;
+    cnode.type = node_type::number_;
+    cnode.number = 11;
+
+    mnode.object.emplace("num", cnode);
+
+    std::string key("nusm");
+    auto& gnode = mnode.object["num"];
+    std::cout << gnode.get<double>();
 }

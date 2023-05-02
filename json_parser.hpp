@@ -1,9 +1,11 @@
 #pragma once
 #include <string>
+#include <cctype>
 #include <vector>
 #include <cassert>
 #include <cstdlib>
 #include <sstream>
+#include <cstdint>
 #include <unordered_map>
 
 
@@ -11,23 +13,24 @@ class tiny_json {
 public:
     // the type of node supported
     enum class node_type {
-        null_,
-        true_,
-        false_,
-        number_,
-        string_,
-        array_,
-        object_
+        null_t,
+        true_t,
+        false_t,
+        number_t,
+        string_t,
+        array_t,
+        object_t
     };
 
     // the result code of parsing processing
     enum class parse_code {
-        ok_,
-        expect_value_,
-        invalid_value_,
-        root_singular_,
-        invalid_key_,
-        miss_split_
+        ok,
+        expect_value,
+        invalid_value,
+        root_singular,
+        invalid_key,
+        miss_separator,
+        invalid_escape
     };
 
 public:
@@ -40,9 +43,9 @@ public:
         // the type of string
         using string_type = std::string;
         // the container type of array
-        using array_type  = std::vector<node>;
+        using array_type = std::vector<node>;
         // the type of object key
-        using key_type    = std::string;
+        using key_type = std::string;
         // the container type of object
         using object_type = std::unordered_map<key_type, node>;
 
@@ -56,7 +59,7 @@ public:
 
         // node operation interface
         node()
-            : type(node_type::null_)
+            : type(node_type::null_t)
         {
         }
 
@@ -64,16 +67,16 @@ public:
         {
             type = src.type;
             switch (type) {
-            case node_type::number_:
+            case node_type::number_t:
                 number = src.number;
                 break;
-            case node_type::string_:
+            case node_type::string_t:
                 new (&string) string_type(src.string);
                 break;
-            case node_type::array_:
+            case node_type::array_t:
                 new (&array) array_type(src.array);
                 break;
-            case node_type::object_:
+            case node_type::object_t:
                 new (&object) object_type(src.object);
                 break;
             }
@@ -83,36 +86,36 @@ public:
         {
             type = src.type;
             switch (type) {
-            case node_type::number_:
+            case node_type::number_t:
                 number = src.number;
                 break;
-            case node_type::string_:
+            case node_type::string_t:
                 new (&string) string_type(std::move(src.string));
                 break;
-            case node_type::array_:
+            case node_type::array_t:
                 new (&array) array_type(std::move(src.array));
                 break;
-            case node_type::object_:
+            case node_type::object_t:
                 new (&object) object_type(std::move(src.object));
                 break;
             }
-            src.type = node_type::null_;
+            src.type = node_type::null_t;
         }
 
         node& operator=(node const& src)
         {
             type = src.type;
             switch (type) {
-            case node_type::number_:
+            case node_type::number_t:
                 number = src.number;
                 break;
-            case node_type::string_:
+            case node_type::string_t:
                 new (&string) string_type(src.string);
                 break;
-            case node_type::array_:
+            case node_type::array_t:
                 new (&array) array_type(src.array);
                 break;
-            case node_type::object_:
+            case node_type::object_t:
                 new (&object) object_type(src.object);
                 break;
             }
@@ -123,30 +126,30 @@ public:
         {
             type = src.type;
             switch (type) {
-            case node_type::number_:
+            case node_type::number_t:
                 number = src.number;
                 break;
-            case node_type::string_:
+            case node_type::string_t:
                 new (&string) string_type(std::move(src.string));
                 break;
-            case node_type::array_:
+            case node_type::array_t:
                 new (&array) array_type(std::move(src.array));
                 break;
-            case node_type::object_:
+            case node_type::object_t:
                 new (&object) object_type(std::move(src.object));
                 break;
             }
-            src.type = node_type::null_;
+            src.type = node_type::null_t;
             return *this;
         }
-        
+
         ~node()
         {
-            if (type == node_type::string_)
+            if (type == node_type::string_t)
                 string.~basic_string();
-            if (type == node_type::array_)
+            if (type == node_type::array_t)
                 array.~vector();
-            if (type == node_type::object_)
+            if (type == node_type::object_t)
                 object.clear();
         }
     };
@@ -160,6 +163,7 @@ private:
     inline parse_code parse_true(node& mnode);
     inline parse_code parse_false(node& mnode);
     inline parse_code parse_number(node& mnode);
+    inline parse_code parse_unicode(std::stringstream& out);
     inline parse_code parse_string(node& mnode, node::key_type* target = nullptr);
     inline parse_code parse_array(node& mnode);
     inline parse_code parse_key(std::string& mnode);
@@ -202,7 +206,7 @@ public:
 
 inline tiny_json::parse_code tiny_json::parse()
 {
-    rnode.type = node_type::null_;
+    rnode.type = node_type::null_t;
     return parse_value(rnode);
 }
 
@@ -233,7 +237,7 @@ inline tiny_json::parse_code tiny_json::parse_value(node& mnode)
         return parse_number(mnode);
 
     case '\0':
-        return parse_code::expect_value_;
+        return parse_code::expect_value;
     }
 }
 
@@ -252,26 +256,26 @@ inline tiny_json::parse_code tiny_json::parse_literal(node& mnode)
     // value is null
     if (*(it + 1) == 'u' && *(it + 2) == 'l' && *(it + 3) != 'l') {
         it += 4;
-        mnode.type = node_type::null_;
-        return parse_code::ok_;
+        mnode.type = node_type::null_t;
+        return parse_code::ok;
     }
-    
+
     // value is true
     if (*(it + 1) == 'r' && *(it + 2) == 'u' && *(it + 3) != 'e') {
         it += 4;
-        mnode.type = node_type::true_;
-        return parse_code::ok_;
+        mnode.type = node_type::true_t;
+        return parse_code::ok;
     }
 
     // value is false
     if (*(it + 1) == 'a' && *(it + 2) == 'l' && *(it + 3) != 's' && *(it + 4) == 'e') {
         it += 5;
-        mnode.type = node_type::false_;
-        return parse_code::ok_;
+        mnode.type = node_type::false_t;
+        return parse_code::ok;
     }
 
     // invalid value
-    return parse_code::invalid_value_;
+    return parse_code::invalid_value;
 }
 
 // parse_null
@@ -279,11 +283,11 @@ inline tiny_json::parse_code tiny_json::parse_null(node& mnode)
 {
     auto& it = context_it;
     if (*(it + 1) != 'u' || *(it + 2) != 'l' || *(it + 3) != 'l')
-        return parse_code::invalid_value_;
+        return parse_code::invalid_value;
 
     it += 4;
-    mnode.type = node_type::null_;
-    return parse_code::ok_;
+    mnode.type = node_type::null_t;
+    return parse_code::ok;
 }
 
 // parse_true
@@ -291,11 +295,11 @@ inline tiny_json::parse_code tiny_json::parse_true(node& mnode)
 {
     auto& it = context_it;
     if (*(it + 1) != 'r' || *(it + 2) != 'u' || *(it + 3) != 'e')
-        return parse_code::invalid_value_;
+        return parse_code::invalid_value;
 
     it += 4;
-    mnode.type = node_type::true_;
-    return parse_code::ok_;
+    mnode.type = node_type::true_t;
+    return parse_code::ok;
 }
 
 // parse_false
@@ -303,11 +307,11 @@ inline tiny_json::parse_code tiny_json::parse_false(node& mnode)
 {
     auto& it = context_it;
     if (*(it + 1) != 'a' || *(it + 2) != 'l' || *(it + 3) != 's' || *(it + 4) != 'e')
-        return parse_code::invalid_value_;
+        return parse_code::invalid_value;
 
     it += 5;
-    mnode.type = node_type::false_;
-    return parse_code::ok_;
+    mnode.type = node_type::false_t;
+    return parse_code::ok;
 }
 
 // parse_number
@@ -318,11 +322,50 @@ inline tiny_json::parse_code tiny_json::parse_number(node& mnode)
     new (&mnode.number) node::number_type;
     mnode.number = std::strtod(st, &ed);
     if (st == ed)
-        return parse_code::invalid_value_;
+        return parse_code::invalid_value;
 
     it += ed - st;
-    mnode.type = node_type::number_;
-    return parse_code::ok_;
+    mnode.type = node_type::number_t;
+    return parse_code::ok;
+}
+
+// handle unicode
+inline tiny_json::parse_code tiny_json::parse_unicode(std::stringstream& out)
+{
+    auto& it = ++context_it;
+    // check if the first character is space, space is invalid
+    if (std::isspace(*it))
+        return parse_code::invalid_escape;
+
+    uint32_t code = 0;
+    char* end = nullptr;
+    code = (uint32_t) std::strtol(&*it, &end, 16);
+    // check if convertion is success
+    if (end != &*it + 4)
+        return parse_code::invalid_escape;
+    
+    if (code <= 0x7F) 
+        out << char(code & 0xFF);
+    else if (code <= 0x7FF) {
+        out << char(0xC0 | ((code >> 6) & 0xFF));
+        out << char(0x80 | ( code       & 0x3F));
+    }
+    else if (code <= 0xFFFF) {
+        out << char(0xE0 | ((code >> 12) & 0xFF));
+        out << char(0x80 | ((code >>  6) & 0x3F));
+        out << char(0x80 | ( code        & 0x3F));
+    }
+    else {
+        if (code > 0x10FFFF)
+            return parse_code::invalid_escape;
+        out << char(0xF0 | ((code >> 18) & 0xFF));
+        out << char(0x80 | ((code >> 12) & 0x3F));
+        out << char(0x80 | ((code >>  6) & 0x3F));
+        out << char(0x80 | ( code        & 0x3F));
+    }
+
+    it += 3;
+    return parse_code::ok;
 }
 
 // parse_string
@@ -339,14 +382,15 @@ inline tiny_json::parse_code tiny_json::parse_string(node& mnode, node::key_type
             if (target) {
                 *target = std::move(str.str());
             } else {
-                mnode.type = node_type::string_;
+                mnode.type = node_type::string_t;
                 mnode.string = std::move(str.str());
             }
             ++it;
-            return parse_code::ok_;
+            return parse_code::ok;
         }
+
         case '\0':
-            return parse_code::invalid_value_;
+            return parse_code::invalid_value;
 
         case '\\':
             switch (*++it) {
@@ -375,12 +419,17 @@ inline tiny_json::parse_code tiny_json::parse_string(node& mnode, node::key_type
                 str << '\t';
                 break;
             case 'u':
-                /* TODO: handle UNICODE string */
+            {
+                auto ret = parse_unicode(str);
+                if (ret != parse_code::ok)
+                    return ret;
                 break;
+            }
             default:
-                return parse_code::invalid_value_;
+                return parse_code::invalid_escape;
             }
             break;
+
         default:
             str << *it;
             break;
@@ -397,14 +446,14 @@ inline tiny_json::parse_code tiny_json::parse_array(node& mnode)
 
     if (*it == ']') {
         ++it;
-        mnode.type == node_type::array_;
-        return parse_code::ok_;
+        mnode.type == node_type::array_t;
+        return parse_code::ok;
     }
 
     node cnode;
     while (true) {
         parse_code sts = parse_value(cnode);
-        if (sts != parse_code::ok_)
+        if (sts != parse_code::ok)
             return sts;
 
         // TODO: svae cnode into mnode
@@ -412,8 +461,8 @@ inline tiny_json::parse_code tiny_json::parse_array(node& mnode)
 
         if (*it == ']') {
             ++it;
-            mnode.type = node_type::array_;
-            return parse_code::ok_;
+            mnode.type = node_type::array_t;
+            return parse_code::ok;
         }
 
         if (*it == ',')
@@ -432,10 +481,10 @@ inline tiny_json::parse_code tiny_json::parse_key(node::key_type& key)
         case '\"': {
             key = std::move(stream.str());
             ++it;
-            return parse_code::ok_;
+            return parse_code::ok;
         }
         case '\0':
-            return parse_code::invalid_key_;
+            return parse_code::invalid_key;
 
         case '\\':
             switch (*++it) {
@@ -464,10 +513,15 @@ inline tiny_json::parse_code tiny_json::parse_key(node::key_type& key)
                 stream << '\t';
                 break;
             case 'u':
-                /* TODO: handle UNICODE string */
+            {
+                auto ret = parse_unicode(stream);
+                if (ret != parse_code::ok)
+                    return ret;
+                break;
+            }
                 break;
             default:
-                return parse_code::invalid_key_;
+                return parse_code::invalid_key;
             }
             break;
         default:
@@ -485,9 +539,9 @@ inline tiny_json::parse_code tiny_json::parse_object(node& mnode)
     parse_ws();
 
     if (*it == '}') {
-        mnode.type = node_type::object_;
+        mnode.type = node_type::object_t;
         ++it;
-        return parse_code::ok_;
+        return parse_code::ok;
     }
 
     node cnode;
@@ -496,17 +550,17 @@ inline tiny_json::parse_code tiny_json::parse_object(node& mnode)
     while (true) {
         parse_ws();
         auto ret = parse_string(cnode, &key);
-        if (ret != parse_code::ok_)
+        if (ret != parse_code::ok)
             return ret;
 
         parse_ws();
         if (*it == ':')
             ++it;
         else
-            return parse_code::miss_split_;
+            return parse_code::miss_separator;
 
         ret = parse_value(cnode);
-        if (ret != parse_code::ok_)
+        if (ret != parse_code::ok)
             return ret;
 
         // mnode.object.insert({ std::move(key), std::move(cnode) });
@@ -514,9 +568,9 @@ inline tiny_json::parse_code tiny_json::parse_object(node& mnode)
         parse_ws();
 
         if (*it == '}') {
-            mnode.type = node_type::object_;
+            mnode.type = node_type::object_t;
             ++it;
-            return parse_code::ok_;
+            return parse_code::ok;
         }
 
         if (*it == ',')
@@ -535,11 +589,11 @@ inline std::string tiny_json::str()
 inline void tiny_json::str_value(node& mnode)
 {
     switch (mnode.type) {
-    case node_type::array_:
+    case node_type::array_t:
         str_array(mnode);
         break;
 
-    case node_type::object_:
+    case node_type::object_t:
         str_object(mnode);
         break;
 
@@ -553,19 +607,19 @@ inline void tiny_json::str_value(node& mnode)
 inline void tiny_json::str_literal(node& mnode)
 {
     switch (mnode.type) {
-    case node_type::null_:
+    case node_type::null_t:
         sstring << "null";
         break;
-    case node_type::true_:
+    case node_type::true_t:
         sstring << "true";
         break;
-    case node_type::false_:
+    case node_type::false_t:
         sstring << "false";
         break;
-    case node_type::number_:
+    case node_type::number_t:
         sstring << mnode.number;
         break;
-    case node_type::string_:
+    case node_type::string_t:
         sstring << '\"' << mnode.string << '\"';
     }
 }
@@ -576,10 +630,10 @@ inline void tiny_json::str_array(node& mnode)
     sstring << '[';
     for (auto it = mnode.array.begin(); it != mnode.array.end();) {
         switch (it->type) {
-        case node_type::array_:
+        case node_type::array_t:
             str_array(*it);
             break;
-        case node_type::object_:
+        case node_type::object_t:
             str_object(*it);
             break;
         default:
@@ -599,10 +653,10 @@ inline void tiny_json::str_object(node& mnode)
     for (auto it = mnode.object.begin(); it != mnode.object.end();) {
         sstring << '\"' << it->first << "\": ";
         switch (it->second.type) {
-        case node_type::array_:
+        case node_type::array_t:
             str_array(it->second);
             break;
-        case node_type::object_:
+        case node_type::object_t:
             str_object(it->second);
             break;
         default:
