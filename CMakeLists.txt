@@ -1,11 +1,34 @@
 cmake_minimum_required(VERSION 3.15)
-project(json_parser)
+project(mini_json)
 
 
-aux_source_directory(. main_src)
-# add_executable(main ${main_src})
-add_executable(main main.cc)
+# rebuild
+add_custom_target(
+    build
+    COMMAND cmake ..
+)
 
+# run test
+add_subdirectory(test)
+add_custom_target(
+    run_t
+    COMMAND cmake --build . 
+    COMMAND test
+    DEPENDS test
+)
 
-find_package(Catch2 REQUIRED)
-target_link_libraries(main PRIVATE Catch2::Catch2WithMain)
+# run benchmark
+add_custom_target(
+    run_b
+    COMMAND cmake --build . 
+    COMMAND bench
+    DEPENDS bench
+)
+
+# run memory check
+add_custom_target(
+    run_m
+    COMMAND cmake --build . 
+    COMMAND valgrind --leak-check=full test/test
+    DEPENDS test
+)
