@@ -1,13 +1,16 @@
+#pragma once
 #include "node.hpp"
+#include <boost/optional.hpp>
 #include <memory>
 #include <optional>
 #include <sstream>
+#include <string_view>
 
 namespace mini_json {
 
 /**
  * context_t is the type of context which holds the json info
- * output_t is the type of stringify result 
+ * output_t is the type of stringify result
  */
 using context_t = std::string;
 using output_t = std::string;
@@ -19,7 +22,7 @@ class json {
 
 public:
     /**
-     * error_code includes all types of error while parsing and stringing 
+     * error_code includes all types of error while parsing and stringing
      */
     enum class error_code {
         non,
@@ -32,8 +35,8 @@ public:
     };
 
 private:
-    std::shared_ptr<node> root = nullptr;
-    std::shared_ptr<output_t> string = nullptr;
+    std::unique_ptr<node> root = nullptr;
+    std::unique_ptr<output_t> string = nullptr;
     context_t context;
     context_t::iterator context_it;
     error_code perr = error_code::non;
@@ -42,7 +45,7 @@ private:
 public:
     /**
      * json accept an context while construcing
-     * which could copy or move from argument 
+     * which could copy or move from argument
      */
     json(context_t const& init)
         : context(init)
@@ -59,16 +62,17 @@ public:
     /**
      * parse operation will try to parse the context to root node
      * which should return an optional
-     * the optional maybe hold a shared_ptr pointed to root node 
+     * the optional maybe hold a shared_ptr pointed to root node
      */
-    std::optional<decltype(root)> parse()
+    boost::optional<node&> parse()
     {
         if (!root)
-         root = std::make_shared<node>();
+            root = std::make_unique<node>();
 
         if (root && parse_value(*root))
-            return root;
-        root->set(nullptr);
+            return *root;
+
+        root = nullptr;
         return {};
     }
 
@@ -77,20 +81,34 @@ public:
      * which should also return an optional
      * the optional maybe hold a shared_ptr pointed to string
      */
-    std::optional<decltype(string)> str()
+    boost::optional<output_t&> str()
     {
         if (!string)
-            string = std::make_shared<output_t>();
+            string = std::make_unique<output_t>();
 
         if (root && str_value(*root))
-            return string;
-        string->clear();
+            return *string;
+
+        string = nullptr;
         return {};
+    }
+
+    /**
+     * get error code
+     */
+    error_code errp() const noexcept
+    {
+        return perr;
+    }
+
+    error_code errs() const noexcept
+    {
+        return serr;
     }
 
 private:
     /**
-     * submethods about parsing 
+     * submethods about parsing
      */
     void parse_ws();
     bool parse_value(node& mnode);
@@ -104,16 +122,15 @@ private:
 
     // submethods about stringing
     bool str_value(node& mnode);
-    output_t str_string(output_t const& src);
+    output_t str_string(std::string_view src);
     bool str_literal(node& mnode);
     bool str_array(node& mnode);
     bool str_object(node& mnode);
 };
 
-
 /**
  * parse_value take charge of distinguish the type of subnode
- * and dispatching the parsing tasks to other submethods 
+ * and dispatching the parsing tasks to other submethods
  */
 inline bool json::parse_value(node& mnode)
 {
@@ -146,9 +163,8 @@ inline bool json::parse_value(node& mnode)
     }
 }
 
-
 /**
- * parse_ws let iterator point to next non-empty charactor 
+ * parse_ws let iterator point to next non-empty charactor
  */
 inline void json::parse_ws()
 {
@@ -156,7 +172,6 @@ inline void json::parse_ws()
     while (*it == ' ' || *it == '\n' || *it == '\t' || *it == '\r')
         ++it;
 }
-
 
 /**
  * parse_literal take charge of parsing literal value
@@ -200,13 +215,13 @@ inline bool json::parse_number(node& mnode)
 {
     auto& it = context_it;
     char *st = &*it, *ed = st;
-    
+
     number_t num = static_cast<number_t>(std::strtod(st, &ed));
     if (st == ed) {
         perr = error_code::invalid_value;
         return false;
     }
-    
+
     it += ed - st;
     mnode.set(num);
     return true;
@@ -227,7 +242,7 @@ inline bool json::parse_unicode(string_t& out)
 
     uint32_t code = 0;
     char* end = nullptr;
-    code = (uint32_t) std::strtol(&*it, &end, 16);
+    code = (uint32_t)std::strtol(&*it, &end, 16);
     // check if convertion is success
     if (end != &*it + 4) {
         perr = error_code::invalid_escape;
@@ -241,18 +256,18 @@ inline bool json::parse_unicode(string_t& out)
         len = 1;
     } else if (code <= 0x7FF) {
         tmp[0] = char(0xC0 | ((code >> 6) & 0xFF));
-        tmp[1] = char(0x80 | ( code       & 0x3F));
+        tmp[1] = char(0x80 | (code & 0x3F));
         len = 2;
     } else if (code <= 0xFFFF) {
         tmp[0] = char(0xE0 | ((code >> 12) & 0xFF));
-        tmp[1] = char(0x80 | ((code >>  6) & 0x3F));
-        tmp[2] = char(0x80 | ( code        & 0x3F));
+        tmp[1] = char(0x80 | ((code >> 6) & 0x3F));
+        tmp[2] = char(0x80 | (code & 0x3F));
         len = 3;
     } else if (code <= 0x10FFFF) {
         tmp[0] = char(0xF0 | ((code >> 18) & 0xFF));
         tmp[1] = char(0x80 | ((code >> 12) & 0x3F));
-        tmp[2] = char(0x80 | ((code >>  6) & 0x3F));
-        tmp[3] = char(0x80 | ( code        & 0x3F));
+        tmp[2] = char(0x80 | ((code >> 6) & 0x3F));
+        tmp[3] = char(0x80 | (code & 0x3F));
         len = 4;
     } else {
         perr = error_code::invalid_escape;
@@ -311,8 +326,7 @@ inline bool json::parse_string(node& mnode)
             case 't':
                 rlt.append("\t");
                 break;
-            case 'u':
-            {
+            case 'u': {
                 string_t ustr;
                 if (!parse_unicode(ustr))
                     return false;
@@ -334,7 +348,7 @@ inline bool json::parse_string(node& mnode)
 
 /**
  * parse_array take charge of parsing array datastruture
- * which use vector as default container 
+ * which use vector as default container
  */
 inline bool json::parse_array(node& mnode)
 {
@@ -349,7 +363,7 @@ inline bool json::parse_array(node& mnode)
 
     node cnode;
     auto& arr = mnode.get<node_t::array_t>();
-    
+
     while (true) {
         if (!parse_value(cnode))
             return false;
@@ -366,7 +380,6 @@ inline bool json::parse_array(node& mnode)
             ++it;
     }
 }
-
 
 /**
  * parse_key is a submethod of parse_object
@@ -413,8 +426,7 @@ inline bool json::parse_key(key_t& key)
             case 't':
                 key.append("\t");
                 break;
-            case 'u':
-            {
+            case 'u': {
                 string_t ustr;
                 if (!parse_unicode(ustr))
                     return false;
@@ -436,7 +448,7 @@ inline bool json::parse_key(key_t& key)
 
 /**
  * parse_object take charge of parsing object datastructure
- * object node use unordered_map as its default container 
+ * object node use unordered_map as its default container
  */
 inline bool json::parse_object(node& mnode)
 {
@@ -449,7 +461,7 @@ inline bool json::parse_object(node& mnode)
         return true;
     }
 
-    auto& obj = mnode.get<node_t::object_t>(); 
+    auto& obj = mnode.get<node_t::object_t>();
     node cnode;
     key_t key;
 
@@ -484,7 +496,7 @@ inline bool json::parse_object(node& mnode)
 }
 
 /**
- * str_value is the interface to stringify root node 
+ * str_value is the interface to stringify root node
  */
 inline bool json::str_value(node& mnode)
 {
@@ -501,18 +513,16 @@ inline bool json::str_value(node& mnode)
     return false;
 }
 
-
 /**
  * because of escape charactors
  * node of string type need to be sepcially handled
  */
-inline output_t json::str_string(output_t const& src)
+inline output_t json::str_string(std::string_view src)
 {
     output_t ret;
-    
+
     for (auto it = src.begin(); it != src.end(); ++it) {
-        switch (*it)
-        {
+        switch (*it) {
         case '\"':
             ret.append("\\\"");
             break;
@@ -528,7 +538,7 @@ inline output_t json::str_string(output_t const& src)
 }
 
 /**
- * the interface of stringing literal node 
+ * the interface of stringing literal node
  */
 inline bool json::str_literal(node& mnode)
 {
@@ -539,8 +549,7 @@ inline bool json::str_literal(node& mnode)
     case node_t::bool_t:
         string->append(mnode.get<node_t::bool_t>() ? "true" : "false");
         break;
-    case node_t::number_t:
-    {
+    case node_t::number_t: {
         auto conv = std::to_string(mnode.get<node_t::number_t>());
         string->append(string_t(conv.begin(), conv.end()));
         break;
@@ -557,7 +566,7 @@ inline bool json::str_literal(node& mnode)
 }
 
 /**
- * stringing node of array type 
+ * stringing node of array type
  */
 inline bool json::str_array(node& mnode)
 {
@@ -586,7 +595,7 @@ inline bool json::str_array(node& mnode)
 }
 
 /**
- * stringing node of object node 
+ * stringing node of object node
  */
 inline bool json::str_object(node& mnode)
 {

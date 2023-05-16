@@ -8,5 +8,8 @@ target_include_directories(bench PRIVATE ../include)
 
 
 find_package(Catch2 REQUIRED)
+find_package(Boost  REQUIRED)
+# need boost-optional headers
+include_directories(${Boost_INCLUDE_DIRS})
 target_link_libraries(test PRIVATE Catch2::Catch2WithMain)
 target_link_libraries(bench PRIVATE Catch2::Catch2WithMain)

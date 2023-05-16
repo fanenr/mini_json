@@ -1,133 +1,96 @@
+#include <boost/optional/optional_io.hpp>
 #include <catch2/catch_test_macros.hpp>
-#include <mini_json/node.hpp>
 #include <memory>
+#include <mini_json/node.hpp>
 
 namespace json = mini_json;
-using     type = json::node_t;
+using type = json::node_t;
 
-
-TEST_CASE("test node initialize", "[node]")
+TEST_CASE("test node null", "[node]")
 {
-    // node(nullptr)
-    json::node node_null;
-    REQUIRE(node_null.type() == type::null_t);
-    REQUIRE(node_null.get<type::null_t>() == nullptr);
+    json::node null1;
+    REQUIRE(null1.type() == type::null_t);
 
-    // node(null)
-    auto null = nullptr;
-    json::node node_null2(null);
-    REQUIRE(node_null2.type() == type::null_t);
-    REQUIRE(node_null2.get<type::null_t>() == nullptr);
+    json::node null2(json::null_t {});
+    REQUIRE(null2.type() == type::null_t);
 
-    // node(true)
-    json::node node_bool(true);
-    REQUIRE(node_bool.type() == type::bool_t);
-    REQUIRE(node_bool.get<type::bool_t>() == true);
+    json::node null3(nullptr);
+    REQUIRE(null3.type() == type::null_t);
 
-    // ndoe(sts)
-    bool sts = true;
-    json::node node_bool2(sts);
-    REQUIRE(node_bool2.type() == type::bool_t);
-    REQUIRE(node_bool2.get<type::bool_t>() == true);
-
-    // node(sts&)
-    bool& sts_rl = sts;
-    json::node node_bool3(sts_rl);
-    REQUIRE(node_bool3.type() == type::bool_t);
-    REQUIRE(node_bool3.get<type::bool_t>() == true);
-
-    // node(bool&&)
-    bool&& sts_rr = std::move(sts);
-    json::node node_bool4(sts_rr);
-    REQUIRE(node_bool4.type() == type::bool_t);
-    REQUIRE(node_bool4.get<type::bool_t>() == true);
-
-    // node(bool const&)
-    bool const& sts_crl = sts;
-    json::node node_bool5(sts_crl);
-    REQUIRE(node_bool5.type() == type::bool_t);
-    REQUIRE(node_bool5.get<type::bool_t>() == true);
-
-    // node(bool const&)
-    bool const&& sts_crr = std::move(sts);
-    json::node node_bool6(sts_crr);
-    REQUIRE(node_bool6.type() == type::bool_t);
-    REQUIRE(node_bool6.get<type::bool_t>() == true);
-
-    // ndoe(double)
-    double num = 1.0;
-    json::node node_num(1.0);
-    REQUIRE(node_num.type() == type::number_t);
-    REQUIRE(node_num.get<type::number_t>() == 1.0);
-
-    // node(double const&)
-    auto const& num_crl = num;
-    json::node node_num2(num_crl);
-    REQUIRE(node_num2.type() == type::number_t);
-    REQUIRE(node_num2.get<type::number_t>() == 1.0);
-
-    // node(double) <- std::unique_ptr<double>
-    auto num_ptr = std::make_unique<double>(num_crl);
-    json::node node_num3(*num_ptr);
-    REQUIRE(node_num3.type() == type::number_t);
-    REQUIRE(node_num3.get<type::number_t>() == 1.0);
-
-    // node(string)
-    std::string str("hello");
-    json::node node_str(str);
-    REQUIRE(node_str.type() == type::string_t);
-    REQUIRE(node_str.get<type::string_t>() == str);
-
-    // node(string&)
-    auto& str_cp = str;
-    json::node node_str2(str_cp);
-    REQUIRE(node_str2.type() == type::string_t);
-    REQUIRE(node_str2.get<type::string_t>() == str_cp);
-
-    // node(string&&)
-    json::node node_str3(std::move(str_cp));
-    REQUIRE(node_str3.type() == type::string_t);
-    REQUIRE(node_str3.get<type::string_t>() == "hello");
-    // the str must be empty string because we moved it
-    REQUIRE(str == "");
-
-    // node(array)
-    std::vector<json::node> vec;
-    for (int i = 0; i < 10; ++i)
-        vec.emplace_back(json::node(static_cast<double>(i)));
-    json::node node_arr(vec);
-    REQUIRE(node_arr.type() == type::array_t);
-    REQUIRE(node_arr.get<type::array_t>().size() == 10);
-    for (int i = 0; i < 10; ++i)
-        REQUIRE(static_cast<double>(i) == node_arr.get<type::array_t>()[i].get<type::number_t>());
-
-    // node(array&&)
-    json::node node_arr2(std::move(vec));
-    REQUIRE(node_arr.type() == type::array_t);
-    REQUIRE(node_arr.get<type::array_t>().size() == 10);
-    // the size of vec must be 0 because we moved it
-    REQUIRE(vec.size() == 0);
-    for (int i = 0; i < 10; ++i)
-        REQUIRE(static_cast<double>(i) == node_arr2.get<type::array_t>()[i].get<type::number_t>());
+    REQUIRE(null1.get<type::null_t>() == json::null_t {});
+    REQUIRE(null2.get<type::null_t>() == json::null_t {});
+    REQUIRE(null3.get<type::null_t>() == json::null_t {});
 }
 
-
-TEST_CASE("test node get", "[node]")
+TEST_CASE("test node bool", "[node]")
 {
+    json::node bool1(true);
+    REQUIRE(bool1.type() == type::bool_t);
 
+    json::node bool2(false);
+    REQUIRE(bool2.type() == type::bool_t);
+
+    REQUIRE(bool1.get<type::bool_t>() == true);
+    REQUIRE(bool1.get_bool());
+    REQUIRE(*bool1.get_bool() == true);
+
+    REQUIRE(bool2.get<type::bool_t>() == false);
+    REQUIRE(bool2.get_bool());
+    REQUIRE(*bool2.get_bool() == false);
 }
 
-
-TEST_CASE("test node set", "[node]")
+TEST_CASE("test node number", "[node]")
 {
-    json::node node1;
-    node1.set(1.0);
-    REQUIRE(node1.type() == type::number_t);
-    REQUIRE(node1.get<type::number_t>() == 1.0);
+    json::node num1(11);
+    REQUIRE(num1.type() == type::number_t);
 
-    node1.set(true);
-    REQUIRE(node1.type() == type::bool_t);
-    REQUIRE(node1.get<type::bool_t>() == true);
+    json::node num2(2.0f);
+    REQUIRE(num2.type() == type::number_t);
 
-    node1.set(json::object_t());
+    json::node num3(1.0);
+    REQUIRE(num3.type() == type::number_t);
+
+    REQUIRE(num2.get<type::number_t>() == static_cast<json::number_t>(2.0f));
+    REQUIRE(num2.get_num());
+    REQUIRE(*num2.get_num() == static_cast<json::number_t>(2.0f));
+}
+
+TEST_CASE("test node string", "[node]")
+{
+    json::node str1("hello");
+    REQUIRE(str1.type() == type::string_t);
+
+    json::string_t world = "world";
+    json::node str2(world);
+    REQUIRE(str2.type() == type::string_t);
+
+    json::node str3(std::move(world));
+    REQUIRE(str3.type() == type::string_t);
+
+    REQUIRE(str3.get<type::string_t>() == "world");
+    REQUIRE(str3.get_str());
+    REQUIRE(*str3.get_str() == "world");
+}
+
+TEST_CASE("test node array", "[node]")
+{
+    json::array_t vec { json::node(), json::node(1), json::node("hello") };
+    json::node arr1(vec);
+    REQUIRE(arr1.type() == type::array_t);
+
+    json::node arr2(std::move(vec));
+    REQUIRE(arr2.type() == type::array_t);
+}
+
+TEST_CASE("test node object", "[node]")
+{
+    json::object_t map;
+    map.emplace("name", json::node("arthur"));
+    map.emplace("age", json::node(19));
+
+    json::node obj1(map);
+    REQUIRE(obj1.type() == type::object_t);
+
+    json::node obj2(std::move(map));
+    REQUIRE(obj2.type() == type::object_t);
 }
