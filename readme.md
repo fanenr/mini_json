@@ -5,7 +5,6 @@
 2. vcpkg (need Catch2 for test)
 3. g++ and make (C++17 or later)
 4. valgrind (for memory check)
-5. use boost::optional replace std::optional
 ```
 1. Build
 ``` shell
@@ -30,46 +29,38 @@ make run_m
 #include "include/mini_json/json.hpp"
 #include <iostream>
 #include <cassert>
+#include <string_view>
+#include <unordered_map>
+
+/*
+ * there are tow methods to obtain data from node object
+ * for node.get<Type>(), it may (without errors) return a ref of data
+ *      but the Type must be same as the node's built-in data 
+ * for node.as<Type>(), it may (without errors) return a copy of data
+ *      it only requires the data can be converted to Type data
+ */
 
 int main()
 {
     namespace json = mini_json;
-    using ntype = json::node_t;
+    using Obj = std::unordered_map<std::string, json::node>;
 
     // create json object
-    json::context_t cont = "{\"name\": \"arthur\", \"age\": 19}";
+    std::string cont = "{\"name\": \"arthur\", \"age\": 19}";
     json::json demo(std::move(cont));
 
     // parse json context
     auto ret = demo.parse();
 
-    // visit elements in safety way
-    if (ret) {
-        // get node
-        auto const& node = *ret;
-        // get elements
-        try {
-            // auto const& root = node.get<ntype::object_t>();
-            assert(node.get_obj());
-            auto const& root = *node.get_obj();
-            // auto name = root.at("name").get<ntype::string_t>();
-            // int  age  = root.at("age").get<ntype::number_t>();
-            assert(root.at("name").get_str());
-            auto name = *root.at("name").get_str();
-            int  age  = root.at("age").get_num().value_or(-1);
-            std::cout << "name: " << name << std::endl;
-            std::cout << "age : " << age << std::endl;
-        } catch (const std::exception& e) {
-            std::cerr << e.what() << '\n';
-        }
-    }
-
     // visit elements in easy way
     if (ret) {
         auto& node = *ret;
-        auto& root = *node.get_obj();
-        auto name = *root["name"].get_str();
-        int  age  = *root["age"].get_num();
+        auto& root = node.get<Obj>();
+        // a string_view object is fast and safe
+        auto  name = root["name"].as<std::string_view>();
+        // the type of number data in a node object is double
+        // but it can be converted to int data from as<int> func
+        int   age  = root["age"].as<int>();
         std::cout << "name: " << name << std::endl;
         std::cout << "age : " << age << std::endl;
     }

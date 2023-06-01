@@ -1,96 +1,85 @@
-#include <boost/optional/optional_io.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <cstddef>
 #include <memory>
 #include <mini_json/node.hpp>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <vector>
 
 namespace json = mini_json;
-using type = json::node_t;
 
 TEST_CASE("test node null", "[node]")
 {
     json::node null1;
-    REQUIRE(null1.type() == type::null_t);
+    json::node null2(nullptr);
+    json::node null3(std::nullptr_t {});
 
-    json::node null2(json::null_t {});
-    REQUIRE(null2.type() == type::null_t);
-
-    json::node null3(nullptr);
-    REQUIRE(null3.type() == type::null_t);
-
-    REQUIRE(null1.get<type::null_t>() == json::null_t {});
-    REQUIRE(null2.get<type::null_t>() == json::null_t {});
-    REQUIRE(null3.get<type::null_t>() == json::null_t {});
+    REQUIRE(null1.get<std::nullptr_t>() == nullptr);
+    REQUIRE(null2.as<std::nullptr_t>() == nullptr);
+    REQUIRE(null3.as<std::nullptr_t>() == nullptr);
 }
 
 TEST_CASE("test node bool", "[node]")
 {
     json::node bool1(true);
-    REQUIRE(bool1.type() == type::bool_t);
-
     json::node bool2(false);
-    REQUIRE(bool2.type() == type::bool_t);
 
-    REQUIRE(bool1.get<type::bool_t>() == true);
-    REQUIRE(bool1.get_bool());
-    REQUIRE(*bool1.get_bool() == true);
+    REQUIRE(bool1.as<bool>() == true);
+    REQUIRE(bool1.get<bool>() == true);
 
-    REQUIRE(bool2.get<type::bool_t>() == false);
-    REQUIRE(bool2.get_bool());
-    REQUIRE(*bool2.get_bool() == false);
+    REQUIRE(bool2.get<bool>() == false);
+    REQUIRE(bool2.as<bool>() == false);
 }
 
 TEST_CASE("test node number", "[node]")
 {
     json::node num1(11);
-    REQUIRE(num1.type() == type::number_t);
-
     json::node num2(2.0f);
-    REQUIRE(num2.type() == type::number_t);
-
     json::node num3(1.0);
-    REQUIRE(num3.type() == type::number_t);
 
-    REQUIRE(num2.get<type::number_t>() == static_cast<json::number_t>(2.0f));
-    REQUIRE(num2.get_num());
-    REQUIRE(*num2.get_num() == static_cast<json::number_t>(2.0f));
+    REQUIRE(num1.as<int>() == 11);
+    REQUIRE(num2.as<float>() == 2.0f);
+    REQUIRE(num3.get<double>() == 1.0);
 }
 
 TEST_CASE("test node string", "[node]")
 {
+    std::string world = "world";
     json::node str1("hello");
-    REQUIRE(str1.type() == type::string_t);
-
-    json::string_t world = "world";
     json::node str2(world);
-    REQUIRE(str2.type() == type::string_t);
-
     json::node str3(std::move(world));
-    REQUIRE(str3.type() == type::string_t);
 
-    REQUIRE(str3.get<type::string_t>() == "world");
-    REQUIRE(str3.get_str());
-    REQUIRE(*str3.get_str() == "world");
+    REQUIRE(str1.get<std::string>() == "hello");
+    REQUIRE(str2.as<std::string>() == "world");
+    REQUIRE(str3.as<std::string_view>() == "world");
 }
 
 TEST_CASE("test node array", "[node]")
 {
-    json::array_t vec { json::node(), json::node(1), json::node("hello") };
+    std::vector<json::node> vec { {}, 1, "hello" };
     json::node arr1(vec);
-    REQUIRE(arr1.type() == type::array_t);
-
     json::node arr2(std::move(vec));
-    REQUIRE(arr2.type() == type::array_t);
+
+    {
+        auto& node = arr1.get<std::vector<json::node>>();
+        REQUIRE(node[2].get<std::string>() == "hello");
+    }
 }
 
 TEST_CASE("test node object", "[node]")
 {
-    json::object_t map;
-    map.emplace("name", json::node("arthur"));
-    map.emplace("age", json::node(19));
+    std::unordered_map<std::string, json::node> map = {
+        { "name", "arthur" },
+        { "age", 19 }
+    };
 
     json::node obj1(map);
-    REQUIRE(obj1.type() == type::object_t);
-
     json::node obj2(std::move(map));
-    REQUIRE(obj2.type() == type::object_t);
+
+    {
+        auto& node = obj1.get<std::unordered_map<std::string, json::node>>();
+        REQUIRE(node["name"].get<std::string>() == "arthur");
+        REQUIRE(node["age"].as<int>() == 19);
+    }
 }

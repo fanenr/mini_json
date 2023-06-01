@@ -5,7 +5,6 @@
 #include <mini_json/json.hpp>
 
 namespace json = mini_json;
-using type = json::node_t;
 
 
 TEST_CASE("json test", "[benchmark]")
@@ -14,7 +13,7 @@ TEST_CASE("json test", "[benchmark]")
     if (!fs.is_open())
         throw std::runtime_error("Can't open file");
 
-    json::context_t con { std::istreambuf_iterator<char>(fs), std::istreambuf_iterator<char>() };
+    std::string con { std::istreambuf_iterator<char>(fs), std::istreambuf_iterator<char>() };
     json::json obj(std::move(con));
 
     BENCHMARK("test json parse")
