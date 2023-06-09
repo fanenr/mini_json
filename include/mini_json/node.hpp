@@ -1,13 +1,12 @@
 #pragma once
-#include "exception"
-#include "mini_json/exception.hpp"
+#include "../mini_mpf/type_umap.hpp"
+#include "exception.hpp"
 #include <array>
 #include <cstddef>
-#include <iostream>
-#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <unordered_map>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -16,148 +15,127 @@ namespace mini_json {
 class node {
 
 private:
-    friend class json;
-    constexpr static std::size_t N = 7;
+    template <typename T>
+    constexpr static bool is_num = std::is_floating_point_v<T> || std::is_integral_v<T>;
 
-    std::variant<bool, double, std::nullptr_t, std::string,
-        std::vector<node>, std::unordered_map<std::string, node>>
-        data;
+    template <typename Tar, typename Src>
+    constexpr static bool convable = std::is_constructible_v<Tar, Src>;
 
-    template <std::size_t U>
-    struct types {
-        using type = std::decay_t<decltype(std::get<U>(data))>;
-    };
+    template <typename T1, typename T2>
+    constexpr static bool is_same = std::is_same_v<T1, T2>;
 
-    template <std::size_t U>
-    using types_t = typename types<U>::type;
-
-private:
-    enum class result : char {
-        same = 1,
-        bad = 0,
-        ok = 2
-    };
-
-    template <typename Exter>
-    struct type_check_in {
-        using R = result;
-        using E = std::decay_t<Exter>;
-        constexpr static R ret[N] {
-            std::is_same_v<bool, E> ? R::same : R::bad,
-
-            std::is_integral_v<E> || std::is_floating_point_v<E> ? R::ok : R::bad,
-
-            std::is_same_v<types_t<2>, E> ? R::same : R::bad,
-
-            std::is_constructible_v<types_t<3>, Exter> ? (std::is_same_v<types_t<3>, E> ? R::same : R::ok) : R::bad,
-
-            std::is_constructible_v<types_t<4>, Exter> ? (std::is_same_v<types_t<4>, E> ? R::same : R::ok) : R::bad,
-
-            std::is_constructible_v<types_t<5>, Exter> ? (std::is_same_v<types_t<5>, E> ? R::same : R::ok) : R::bad,
-        };
-    };
-
-    template <typename E>
-    constexpr static void pure_check()
-    {
-        static_assert(!std::is_reference_v<E>, "reference is invalid");
-        static_assert(!std::is_pointer_v<E>, "pointer is invalid");
-        static_assert(!std::is_const_v<E>, "constant is invalid");
-    };
-
-    template <typename E, std::size_t U>
-    constexpr static result check_ex_v()
-    {
-        return std::is_constructible_v<E, types_t<U>> ? (std::is_same_v<types_t<U>, E> ? result::same : result::ok) : result::bad;
-    }
-
-    template <typename Exter>
-    struct type_check_ex {
-        using R = result;
-        using E = std::decay_t<Exter>;
-        constexpr static R ret[N] {
-            check_ex_v<E, 0>(),
-
-            check_ex_v<E, 1>(),
-
-            check_ex_v<E, 2>(),
-
-            check_ex_v<E, 3>(),
-
-            check_ex_v<E, 4>(),
-
-            check_ex_v<E, 5>()
-        };
-    };
+    using obj_t = std::unordered_map<std::string, node>;
+    using arr_t = std::vector<node>;
+    using nil_t = std::nullptr_t;
+    using str_t = std::string;
+    using num_t = double;
 
 public:
-    template <typename T, std::size_t Pos = 0>
+    friend class json;
+
+    enum class data_k {
+        null,
+        array,
+        object,
+        string,
+        number,
+        boolean,
+    };
+
+    using data_t = mini_mpf::type_umap<data_k,
+        nil_t,
+        arr_t,
+        obj_t,
+        str_t,
+        num_t,
+        bool>;
+
+private:
+    data_t::forward<std::variant> data;
+
+    data_k type()
+    {
+        return static_cast<data_k>(data.index());
+    }
+
+public:
+    template <typename T>
     constexpr void assign(T&& elem)
     {
-        static_assert(Pos < N, "mini_json::node::assign : invalid type");
-
-        using Type_Check = type_check_in<T>;
-        constexpr auto ret = Type_Check::ret[Pos];
-
-        if constexpr (ret == Type_Check::R::same)
+        using Pure = std::decay_t<T>;
+        if constexpr (data_t::find_if<T>()) {
             data = std::forward<T>(elem);
-
-        if constexpr (ret == Type_Check::R::ok)
-            data = types_t<Pos>(std::forward<T>(elem));
-
-        if constexpr (ret == Type_Check::R::bad)
-            assign<T, Pos + 1>(std::forward<T>(elem));
+        } else {
+            if constexpr (is_same<nil_t, Pure>) {
+                data = nil_t {};
+            } else if constexpr (is_same<bool, Pure>) {
+                data = elem;
+            } else if constexpr (is_num<Pure>) {
+                data = data_t::at<data_k::number>(elem);
+            } else if constexpr (convable<str_t, T>) {
+                data = str_t(std::forward<T>(elem));
+            } else if constexpr (convable<arr_t, T>) {
+                data = arr_t(std::forward<T>(elem));
+            } else if constexpr (convable<obj_t, T>) {
+                data = obj_t(std::forward<T>(elem));
+            } else {
+                throw bad_assign();
+            }
+        }
     }
 
-    template <typename T, std::size_t Pos = 0>
+    template <typename T>
     constexpr T& get()
     {
-        static_assert(Pos < N, "mini_json::node::get : invalid type");
-        pure_check<T>();
+        using Pure = std::decay_t<T>;
+        static_assert(data_t::find_if<Pure>(), "mini_json::node::get : invalid type");
 
-        if constexpr (!std::is_same_v<T, types_t<Pos>>)
-            return get<T, Pos + 1>();
-
-        if (T* got = std::get_if<T>(&data); got)
+        if (T* got = std::get_if<Pure>(&data); got)
             return *got;
 
         throw bad_get();
     }
 
-    template <typename T, std::size_t Pos = 0>
+    template <typename T>
     constexpr T const& get() const
     {
-        static_assert(Pos < N, "mini_json::node::get(const) : invalid type");
-        pure_check<T>();
+        using Pure = std::decay_t<T>;
+        static_assert(data_t::find_if<Pure>(), "mini_json::node::get : invalid type");
 
-        if constexpr (!std::is_same_v<T, types_t<Pos>>)
-            return get<T, Pos + 1>();
-
-        if (T const* got = std::get_if<T>(&data); got)
+        if (T const* got = std::get_if<Pure>(&data); got)
             return *got;
 
         throw bad_get();
     }
 
-    template <typename T, std::size_t Pos = 0>
+    template <typename T>
     T as() const
     {
-        static_assert(Pos < N, "mini_json::node::as : invalid type");
-        pure_check<T>();
+        using Pure = std::decay_t<T>;
 
-        using Type_Check = type_check_ex<T>;
-        constexpr auto ret = Type_Check::ret[Pos];
+        if constexpr (convable<T, nil_t>)
+            if (auto const* got = std::get_if<0>(&data); got)
+                return Pure(*got);
 
-        if constexpr (ret == Type_Check::R::same)
-            if (types_t<Pos> const* got = std::get_if<Pos>(&data); got)
-                return *got;
+        if constexpr (convable<T, arr_t>)
+            if (auto const* got = std::get_if<1>(&data); got)
+                return Pure(*got);
 
-        if constexpr (ret == Type_Check::R::ok)
-            if (types_t<Pos> const* got = std::get_if<Pos>(&data); got)
-                return T(*got);
+        if constexpr (convable<T, obj_t>)
+            if (auto const* got = std::get_if<2>(&data); got)
+                return Pure(*got);
 
-        if constexpr (Pos < N - 1)
-            return as<T, Pos + 1>();
+        if constexpr (convable<T, str_t>)
+            if (auto const* got = std::get_if<3>(&data); got)
+                return Pure(*got);
+
+        if constexpr (convable<T, num_t>)
+            if (auto const* got = std::get_if<4>(&data); got)
+                return Pure(*got);
+
+        if constexpr (convable<T, bool>)
+            if (auto const* got = std::get_if<5>(&data); got)
+                return Pure(*got);
 
         throw bad_as();
     }

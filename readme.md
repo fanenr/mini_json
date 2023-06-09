@@ -1,17 +1,17 @@
 # mini_json is a header-only json library
 1. Prerequisites
 ```
-1. CMake 3.15 or later
-2. vcpkg (need Catch2 for test)
-3. g++ and make (C++17 or later)
+1. C++17 at least
+2. CMake 3.15 or later
+3. vcpkg (need Catch2 for test)
 4. valgrind (for memory check)
 ```
-1. Build
+2. Build
 ``` shell
 mkdir build && cd build
 cmake ..
 ```
-1. Run test
+3. Run test
 ``` shell
 # cd build
 

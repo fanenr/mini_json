@@ -1,14 +1,9 @@
 #pragma once
 #include "node.hpp"
-#include <boost/optional.hpp>
 #include <memory>
-#include <optional>
-#include <sstream>
 #include <string>
-#include <string_view>
 
 namespace mini_json {
-
 
 /**
  * json provides the parsing and stringing manipulation
@@ -21,12 +16,12 @@ public:
      */
     enum class error_code {
         non,
-        expect_value,
-        invalid_value,
-        root_singular,
         invalid_key,
+        expect_value,
+        root_singular,
+        invalid_value,
         miss_separator,
-        invalid_escape
+        invalid_escape,
     };
 
 private:
@@ -62,7 +57,7 @@ public:
             return root.get();
 
         root = nullptr;
-        return {};
+        return nullptr;
     }
 
     /**
@@ -79,7 +74,7 @@ public:
             return string.get();
 
         string = nullptr;
-        return {};
+        return nullptr;
     }
 
     /**
@@ -343,7 +338,7 @@ inline bool json::parse_array(node& mnode)
 {
     auto& it = ++context_it;
     parse_ws();
-    mnode.assign(std::vector<node>());
+    mnode.assign(node::arr_t());
 
     if (*it == ']') {
         ++it;
@@ -351,7 +346,7 @@ inline bool json::parse_array(node& mnode)
     }
 
     node cnode;
-    auto& arr = mnode.get<std::vector<node>>();
+    auto& arr = mnode.get<node::arr_t>();
 
     while (true) {
         if (!parse_value(cnode))
@@ -443,14 +438,14 @@ inline bool json::parse_object(node& mnode)
 {
     auto& it = ++context_it;
     parse_ws();
-    mnode.assign(std::unordered_map<std::string, node>());
+    mnode.assign(node::obj_t());
 
     if (*it == '}') {
         ++it;
         return true;
     }
 
-    auto& obj = mnode.get<std::unordered_map<std::string, node>>();
+    auto& obj = mnode.get<node::obj_t>();
     node cnode;
     std::string key;
 
@@ -460,9 +455,9 @@ inline bool json::parse_object(node& mnode)
             return false;
 
         parse_ws();
-        if (*it == ':')
+        if (*it == ':') {
             ++it;
-        else {
+        } else {
             perr = error_code::miss_separator;
             return false;
         }
@@ -470,7 +465,6 @@ inline bool json::parse_object(node& mnode)
         if (!parse_value(cnode))
             return false;
 
-        // mnode.object.insert({ std::move(key), std::move(cnode) });
         obj.emplace(std::move(key), std::move(cnode));
 
         parse_ws();
@@ -489,11 +483,11 @@ inline bool json::parse_object(node& mnode)
  */
 inline bool json::str_value(node& mnode)
 {
-    switch (mnode.data.index()) {
-    case 4:
+    switch (mnode.type()) {
+    case node::data_k::array:
         return str_array(mnode);
 
-    case 5:
+    case node::data_k::object:
         return str_object(mnode);
 
     default:
@@ -510,18 +504,16 @@ inline std::string json::str_string(std::string_view src)
 {
     std::string ret;
 
-    for (auto it = src.begin(); it != src.end(); ++it) {
+    for (auto it = src.begin(); it != src.end(); ++it)
         switch (*it) {
         case '\"':
             ret.append("\\\"");
             break;
-        case '\\':
-            ret.append("\\");
+
         default:
             ret.append(&*it, 1);
             break;
         }
-    }
 
     return ret;
 }
@@ -531,26 +523,31 @@ inline std::string json::str_string(std::string_view src)
  */
 inline bool json::str_literal(node& mnode)
 {
-    switch (mnode.data.index()) {
-    case 2:
+    switch (mnode.type()) {
+    case node::data_k::null:
         string->append("null");
         break;
-    case 0:
+
+    case node::data_k::boolean:
         string->append(mnode.get<bool>() ? "true" : "false");
         break;
-    case 1: {
-        auto conv = std::to_string(mnode.get<double>());
+
+    case node::data_k::number: {
+        auto conv = std::to_string(mnode.get<node::num_t>());
         string->append(std::string(conv.begin(), conv.end()));
         break;
     }
-    case 3:
+
+    case node::data_k::string:
         string->append("\"")
-            .append(str_string(mnode.get<std::string>()))
+            .append(str_string(mnode.get<node::str_t>()))
             .append("\"");
         break;
+
     default:
         return false;
     }
+
     return true;
 }
 
@@ -560,25 +557,32 @@ inline bool json::str_literal(node& mnode)
 inline bool json::str_array(node& mnode)
 {
     string->append("[");
-    auto& arr = mnode.get<std::vector<node>>();
+    auto& arr = mnode.get<node::arr_t>();
+
     bool sts = false;
     for (auto it = arr.begin(); it != arr.end();) {
-        switch (it->data.index()) {
-        case 4:
+
+        switch (it->type()) {
+        case node::data_k::array:
             sts = str_array(*it);
             break;
-        case 5:
+
+        case node::data_k::object:
             sts = str_object(*it);
             break;
+
         default:
             sts = str_literal(*it);
             break;
         }
+
         if (!sts)
             return false;
+
         if (++it != arr.end())
             string->append(", ");
     }
+
     string->append("]");
     return true;
 }
@@ -589,28 +593,35 @@ inline bool json::str_array(node& mnode)
 inline bool json::str_object(node& mnode)
 {
     string->append("{");
-    auto& map = mnode.get<std::unordered_map<std::string, node>>();
+    auto& map = mnode.get<node::obj_t>();
+
     bool sts = false;
     for (auto it = map.begin(); it != map.end();) {
         string->append("\"")
             .append(str_string(it->first))
             .append("\": ");
-        switch (it->second.data.index()) {
-        case 4:
+
+        switch (it->second.type()) {
+        case node::data_k::array:
             sts = str_array(it->second);
             break;
-        case 5:
+
+        case node::data_k::object:
             sts = str_object(it->second);
             break;
+
         default:
             sts = str_literal(it->second);
             break;
         }
+
         if (!sts)
             return false;
+
         if (++it != map.end())
             string->append(", ");
     }
+
     string->append("}");
     return true;
 }

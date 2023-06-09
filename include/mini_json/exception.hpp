@@ -3,6 +3,14 @@
 
 namespace mini_json {
 
+class bad_assign : public std::exception {
+public:
+    char const* what() const noexcept override
+    {
+        return "the given type is invalid for node data";
+    }
+};
+
 class bad_get : public std::exception {
 public:
     char const* what() const noexcept override
