@@ -108,37 +108,27 @@ public:
         throw bad_get();
     }
 
+#define CHECK_AND_HANDLE(type)                               \
+    if constexpr (convable<T, type>)                         \
+        if (auto const* got = std::get_if<type>(&data); got) \
+    return Pure(*got)
+
     template <typename T>
     T as() const
     {
         using Pure = std::decay_t<T>;
 
-        if constexpr (convable<T, nil_t>)
-            if (auto const* got = std::get_if<0>(&data); got)
-                return Pure(*got);
-
-        if constexpr (convable<T, arr_t>)
-            if (auto const* got = std::get_if<1>(&data); got)
-                return Pure(*got);
-
-        if constexpr (convable<T, obj_t>)
-            if (auto const* got = std::get_if<2>(&data); got)
-                return Pure(*got);
-
-        if constexpr (convable<T, str_t>)
-            if (auto const* got = std::get_if<3>(&data); got)
-                return Pure(*got);
-
-        if constexpr (convable<T, num_t>)
-            if (auto const* got = std::get_if<4>(&data); got)
-                return Pure(*got);
-
-        if constexpr (convable<T, bool>)
-            if (auto const* got = std::get_if<5>(&data); got)
-                return Pure(*got);
+        CHECK_AND_HANDLE(nil_t);
+        CHECK_AND_HANDLE(arr_t);
+        CHECK_AND_HANDLE(obj_t);
+        CHECK_AND_HANDLE(str_t);
+        CHECK_AND_HANDLE(num_t);
+        CHECK_AND_HANDLE(bool);
 
         throw bad_as();
     }
+
+#undef CHECK_AND_HANDLE
 
 public:
     template <typename T = std::nullptr_t>
